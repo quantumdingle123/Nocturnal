@@ -6,7 +6,7 @@ for _, v in pairs(getconnections(player.Idled)) do
 	v:Disable()
 end
 
--- SERVICES
+-- ================= SERVICES =================
 local RunService = game:GetService("RunService")
 local PathfindingService = game:GetService("PathfindingService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
@@ -14,36 +14,43 @@ local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
--- GUI
-local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+-- ================= GUI =================
+local gui = Instance.new("ScreenGui")
+gui.Name = "MobileFarmGui"
 gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
 
--- NOTIF
+-- 🔔 NOTIFICATION GUI
 local notif = Instance.new("Frame", gui)
-notif.Size = UDim2.new(0,220,0,50)
-notif.Position = UDim2.new(1,250,0,20)
-notif.BackgroundColor3 = Color3.fromRGB(40,40,40)
+notif.Size = UDim2.new(0, 220, 0, 50)
+notif.Position = UDim2.new(1, 250, 0, 20) -- off screen
+notif.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 notif.Visible = false
 Instance.new("UICorner", notif)
 
 local notifText = Instance.new("TextLabel", notif)
-notifText.Size = UDim2.new(1,-10,1,0)
-notifText.Position = UDim2.new(0,5,0,0)
+notifText.Size = UDim2.new(1, -10, 1, 0)
+notifText.Position = UDim2.new(0, 5, 0, 0)
 notifText.BackgroundTransparency = 1
 notifText.Text = "⚠ Player Detected!"
-notifText.TextScaled = true
 notifText.TextColor3 = Color3.new(1,1,1)
+notifText.TextScaled = true
 
 local function showNotification()
 	notif.Visible = true
-	TweenService:Create(notif, TweenInfo.new(0.3), {
-		Position = UDim2.new(1,-230,0,20)
-	}):Play()
+
+	local tweenIn = TweenService:Create(notif, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {
+		Position = UDim2.new(1, -230, 0, 20)
+	})
+
+	local tweenOut = TweenService:Create(notif, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {
+		Position = UDim2.new(1, 250, 0, 20)
+	})
+
+	tweenIn:Play()
 
 	task.delay(2, function()
-		TweenService:Create(notif, TweenInfo.new(0.3), {
-			Position = UDim2.new(1,250,0,20)
-		}):Play()
+		tweenOut:Play()
 	end)
 
 	task.delay(2.3, function()
@@ -51,118 +58,151 @@ local function showNotification()
 	end)
 end
 
--- GUI BUTTON
+-- ================= MAIN GUI =================
 local toggleBox = Instance.new("TextButton", gui)
 toggleBox.Size = UDim2.new(0,60,0,60)
 toggleBox.Position = UDim2.new(0,20,0.5,-30)
 toggleBox.Text = "☰"
 toggleBox.BackgroundColor3 = Color3.fromRGB(45,45,45)
+toggleBox.TextScaled = true
+Instance.new("UICorner", toggleBox)
 
 local frame = Instance.new("Frame", gui)
 frame.Size = UDim2.new(0,230,0,210)
 frame.Position = UDim2.new(0.5,-115,0.5,-105)
 frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
 frame.Visible = false
+Instance.new("UICorner", frame)
 
-toggleBox.MouseButton1Click:Connect(function()
-	frame.Visible = not frame.Visible
+-- drag fix
+local dragging = false
+local dragStart, startPos
+local dragMoved = false
+
+toggleBox.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragMoved = false
+		dragStart = input.Position
+		startPos = toggleBox.Position
+
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+				if not dragMoved then
+					frame.Visible = not frame.Visible
+				end
+			end
+		end)
+	end
 end)
 
--- BUTTONS
+UserInputService.InputChanged:Connect(function(input)
+	if dragging then
+		local delta = input.Position - dragStart
+		if math.abs(delta.X) > 5 or math.abs(delta.Y) > 5 then
+			dragMoved = true
+		end
+
+		if dragMoved then
+			toggleBox.Position = UDim2.new(
+				startPos.X.Scale,
+				startPos.X.Offset + delta.X,
+				startPos.Y.Scale,
+				startPos.Y.Offset + delta.Y
+			)
+		end
+	end
+end)
+
+-- buttons
 local mainBtn = Instance.new("TextButton", frame)
 mainBtn.Size = UDim2.new(1,-20,0,40)
 mainBtn.Position = UDim2.new(0,10,0,30)
 mainBtn.Text = "MAIN: OFF"
+mainBtn.BackgroundColor3 = Color3.fromRGB(170,50,50)
 
 local altBtn = Instance.new("TextButton", frame)
 altBtn.Size = UDim2.new(1,-20,0,40)
 altBtn.Position = UDim2.new(0,10,0,75)
 altBtn.Text = "ALT: OFF"
+altBtn.BackgroundColor3 = Color3.fromRGB(170,50,50)
 
 local resetBtn = Instance.new("TextButton", frame)
 resetBtn.Size = UDim2.new(1,-20,0,40)
 resetBtn.Position = UDim2.new(0,10,0,120)
 resetBtn.Text = "RESET"
+resetBtn.BackgroundColor3 = Color3.fromRGB(200,120,40)
 
--- STATES
+-- ================= STATES =================
 local mode = nil
 local clicking = false
-local altMoving = false
-local altIgnore = nil
+local pathNonce = 0
 local resetCooldown = false
-local triggerUsed = false
 
--- POSITIONS
+-- ================= POSITIONS =================
 local farmTarget = Vector3.new(-10.6566801,255.272766,-611.430786)
-local triggerPoint = Vector3.new(4.31565142,255.272766,-627.21637)
+local detectPoint = Vector3.new(66.7831879,251.986343,-609.299316)
 
 local zone1 = Vector3.new(-6.06593323,256.009552,-599.597107)
 local zone2 = Vector3.new(-33.4331932,256.009552,-593.822449)
 
-local detectPoint = Vector3.new(66.7831879,251.986343,-609.299316)
+local zoneDistance = 8
+local detectRadius = 8
 
-local zoneDist = 8
-local detectDist = 8
-local triggerDist = 10
-
--- HELPERS
-local function getChar()
-	local c = player.Character
-	if not c then return end
-	return c, c:FindFirstChild("Humanoid"), c:FindFirstChild("HumanoidRootPart")
-end
-
-local function near(root,pos,dist)
-	return (root.Position - pos).Magnitude <= dist
-end
-
-local function resetAll()
+-- ================= HELPERS =================
+local function resetStates()
 	mode = nil
 	clicking = false
-	altMoving = false
-	altIgnore = nil
-	triggerUsed = false
+	pathNonce += 1
 
 	mainBtn.Text = "MAIN: OFF"
+	mainBtn.BackgroundColor3 = Color3.fromRGB(170,50,50)
+
 	altBtn.Text = "ALT: OFF"
+	altBtn.BackgroundColor3 = Color3.fromRGB(170,50,50)
 end
 
--- PATH
-local function pathTo(target)
-	local char,hum,root = getChar()
-	if not char or not hum or not root then return end
+local function near(root, point, dist)
+	return (root.Position - point).Magnitude <= dist
+end
 
-	while mode and hum.Health > 0 do
-		if (root.Position - target).Magnitude < 3 then return end
-
-		local path = PathfindingService:CreatePath()
-		path:ComputeAsync(root.Position,target)
-
-		if path.Status ~= Enum.PathStatus.Success then
-			hum.Jump = true
-			task.wait(0.2)
-			continue
-		end
-
-		for _,wp in pairs(path:GetWaypoints()) do
-			if not mode then return end
-
-			if wp.Action == Enum.PathWaypointAction.Jump then
-				hum.Jump = true
-			end
-
-			hum:MoveTo(wp.Position)
-
-			local t = tick()
-			while tick()-t < 2 do
-				if (root.Position - wp.Position).Magnitude < 3 then break end
-				task.wait(0.1)
+-- ================= DETECTION =================
+local function detectPlayers()
+	for _,plr in pairs(Players:GetPlayers()) do
+		if plr ~= player and plr.Character then
+			local root = plr.Character:FindFirstChild("HumanoidRootPart")
+			if root and near(root, detectPoint, detectRadius) then
+				return true
 			end
 		end
 	end
+	return false
 end
 
--- AUTO CLICK
+task.spawn(function()
+	while true do
+		if mode and not resetCooldown then
+			if detectPlayers() then
+				resetCooldown = true
+
+				showNotification()
+
+				ReplicatedStorage:WaitForChild("Remote")
+					:WaitForChild("ResetCharacterRequested")
+					:FireServer()
+
+				resetStates()
+
+				task.wait(2)
+				resetCooldown = false
+			end
+		end
+		task.wait(0.1)
+	end
+end)
+
+-- ================= AUTO CLICK =================
 task.spawn(function()
 	while true do
 		if clicking and mode == "MAIN" then
@@ -174,102 +214,55 @@ task.spawn(function()
 	end
 end)
 
--- MAIN
+-- ================= MAIN =================
 RunService.Heartbeat:Connect(function()
-	if mode ~= "MAIN" then return end
+	if not mode then return end
 
-	local char,hum,root = getChar()
-	if not char or not hum or not root then return end
+	local char = player.Character
+	if not char then return end
 
-	local inZone = near(root,zone1,zoneDist) or near(root,zone2,zoneDist)
-	clicking = inZone
+	local root = char:FindFirstChild("HumanoidRootPart")
+	local hum = char:FindFirstChild("Humanoid")
+	if not root or not hum then return end
 
-	if not inZone then
-		pathTo(farmTarget)
-	end
-end)
+	local inZone = near(root,zone1,zoneDistance) or near(root,zone2,zoneDistance)
 
--- 🔥 ALT (FIXED + TRIGGER SUPPORT)
-RunService.Heartbeat:Connect(function()
-	if mode ~= "ALT" then return end
+	if mode == "MAIN" then
+		clicking = inZone
 
-	local char,hum,root = getChar()
-	if not char or not hum or not root then return end
-
-	-- 🔥 TRIGGER POINT FIX
-	if not near(root, triggerPoint, triggerDist) then
-		triggerUsed = false
-	end
-
-	if near(root, triggerPoint, triggerDist) and not triggerUsed then
-		triggerUsed = true
-		task.spawn(function()
-			pathTo(farmTarget)
-		end)
-	end
-
-	local z
-	if near(root,zone1,zoneDist) then z=1 end
-	if near(root,zone2,zoneDist) then z=2 end
-
-	if not z then altIgnore=nil return end
-	if z==altIgnore then return end
-	if altMoving then return end
-
-	altMoving=true
-
-	task.spawn(function()
-		if z==1 then
-			pathTo(zone2)
-			altIgnore=2
-		elseif z==2 then
-			pathTo(zone1)
-			altIgnore=1
+		if not inZone then
+			hum:MoveTo(farmTarget)
 		end
-		task.wait(0.2)
-		altMoving=false
-	end)
-end)
+	end
 
--- DETECTION
-task.spawn(function()
-	while true do
-		if mode and not resetCooldown then
-			for _,p in pairs(Players:GetPlayers()) do
-				if p~=player and p.Character then
-					local r = p.Character:FindFirstChild("HumanoidRootPart")
-					if r and near(r,detectPoint,detectDist) then
-						resetCooldown=true
-						showNotification()
-
-						ReplicatedStorage:WaitForChild("Remote")
-							:WaitForChild("ResetCharacterRequested")
-							:FireServer()
-
-						resetAll()
-
-						task.wait(2)
-						resetCooldown=false
-						break
-					end
-				end
-			end
+	if mode == "ALT" then
+		if near(root,zone1,zoneDistance) then
+			hum:MoveTo(zone2)
+		elseif near(root,zone2,zoneDistance) then
+			hum:MoveTo(zone1)
 		end
-		task.wait(0.1)
 	end
 end)
 
--- BUTTONS
+-- ================= BUTTONS =================
 mainBtn.MouseButton1Click:Connect(function()
-	mode="MAIN"
-	mainBtn.Text="MAIN: ON"
-	altBtn.Text="ALT: OFF"
+	mode = "MAIN"
+	mainBtn.Text = "MAIN: ON"
+	mainBtn.BackgroundColor3 = Color3.fromRGB(50,170,70)
+
+	altBtn.Text = "ALT: OFF"
+	altBtn.BackgroundColor3 = Color3.fromRGB(170,50,50)
 end)
 
 altBtn.MouseButton1Click:Connect(function()
-	mode="ALT"
-	altBtn.Text="ALT: ON"
-	mainBtn.Text="MAIN: OFF"
+	mode = "ALT"
+	altBtn.Text = "ALT: ON"
+	altBtn.BackgroundColor3 = Color3.fromRGB(50,170,70)
+
+	mainBtn.Text = "MAIN: OFF"
+	mainBtn.BackgroundColor3 = Color3.fromRGB(170,50,50)
 end)
 
-resetBtn.MouseButton1Click:Connect(resetAll)
+resetBtn.MouseButton1Click:Connect(function()
+	resetStates()
+end)
