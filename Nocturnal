@@ -1,5 +1,6 @@
 if _G.AsylumFarmKill then _G.AsylumFarmKill() end
 
+-- services we need
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -8,10 +9,11 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local VirtualUser = game:GetService("VirtualUser")
 local PathfindingService = game:GetService("PathfindingService")
 
+-- player vars
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- anti afk so roblox doesn't kick us while farming
+-- fake some clicks so we don't get kicked for being afk
 player.Idled:Connect(function()
 	VirtualUser:CaptureController()
 	VirtualUser:ClickButton2(Vector2.new())
@@ -20,12 +22,13 @@ end)
 local BOTS = { PearTeto_Real = true, IamtotallynotPearman = true }
 local DEST = CFrame.new(-10.160541534423828, 255.27276611328125, -611.555908203125)
 
+-- ring setup stuff
 local RING_POSITION = Vector3.new(-19.12, 256.01, -595.00)
 local RING_SIZE = Vector3.new(26, 12, 26)
 local RING_ROTATION_Y = -30
 local ringCFrame = CFrame.new(RING_POSITION) * CFrame.Angles(0, math.rad(RING_ROTATION_Y), 0)
 
--- drawing the safe zone ring visually
+-- drawing the safe zone box so we can see it
 local ringVisualsFolder = workspace:FindFirstChild("RingVisuals")
 if not ringVisualsFolder then
 	ringVisualsFolder = Instance.new("Folder")
@@ -59,18 +62,44 @@ if not ringVisualsFolder then
 	centerMarker.Parent = ringVisualsFolder
 end
 
--- bot variables
+-- highlight for the player we are currently healing
+local targetHighlight = Instance.new("Highlight")
+targetHighlight.Name = "HealTargetHighlight"
+targetHighlight.FillColor = Color3.fromRGB(86, 220, 156) 
+targetHighlight.FillTransparency = 0.5
+targetHighlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+targetHighlight.OutlineTransparency = 0.2
+targetHighlight.Parent = ringVisualsFolder
+targetHighlight.Adornee = nil
+
+-- states and target tracking
 local dead = false
 local role = nil
 local running = false
 local isPausedForSafety = false
 local savedRole = nil
+local currentHealTarget = nil 
 
+-- placeholders for ui functions initialized later
 local setStatus = function(txt) end
 local updateFarmBtns = function() end
 
+-- deletes doors so they dont block the path
+local function removeDoors()
+	local workspaceObjects = game.Workspace:GetDescendants()
+	local count = 0
 
--- themes (you can add more colors here if u want)
+	for _, object in pairs(workspaceObjects) do
+		local nameLower = string.lower(object.Name)
+		if string.find(nameLower, "door") then
+			pcall(function() object:Destroy() end)
+			count = count + 1
+		end
+	end
+	print("cleaned up " .. count .. " doors")
+end
+
+-- ui themes
 local Themes = {
 	Dark = {
 		Main = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(18, 18, 24)), ColorSequenceKeypoint.new(0.5, Color3.fromRGB(28, 28, 36)), ColorSequenceKeypoint.new(1, Color3.fromRGB(38, 38, 48))},
@@ -133,8 +162,7 @@ local Themes = {
 local currentThemeName = "Dark"
 local currentTheme = Themes[currentThemeName]
 
-
--- getting the player character properly
+-- helper func to get our character pieces safely
 local function getLatest()
 	local c = player.Character
 	if not c then return nil, nil, nil end
@@ -143,11 +171,13 @@ local function getLatest()
 	return c, h, r
 end
 
+-- simple check to make sure we are spawned in
 local function alive()
 	local c, h, r = getLatest()
 	return (c ~= nil and h ~= nil and r ~= nil and h.Health > 0 and c.Parent ~= nil)
 end
 
+-- checks if our root part is inside the safe zone ring
 local function inRing()
 	local c, h, r = getLatest()
 	if not (c and h and r and h.Health > 0) then return false end
@@ -160,6 +190,7 @@ local function inRing()
 		and math.abs(relative.Z) <= halfSize.Z
 end
 
+-- makes the character halt on the spot
 local function stopCharacter()
 	local c, h, r = getLatest()
 	if h and r then
@@ -167,8 +198,45 @@ local function stopCharacter()
 	end
 end
 
+-- loops through all players and finds the closest one that needs a heal
+local function getClosestHurtPlayer()
+	local closest = nil
+	local minDist = math.huge
+	local c, h, r = getLatest()
+	if not r then return nil end
 
--- pathfinding setup
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player and p.Character then
+			local th = p.Character:FindFirstChildOfClass("Humanoid")
+			local tr = p.Character:FindFirstChild("HumanoidRootPart")
+			
+			if th and tr and th.Health > 0 and th.Health < th.MaxHealth then
+				local dist = (r.Position - tr.Position).Magnitude
+				if dist < minDist then
+					minDist = dist
+					closest = p
+				end
+			end
+		end
+	end
+	return closest
+end
+
+-- proximity prompt hack: forces prompts to be visible from 10 studs away
+task.spawn(function()
+	while not dead do
+		task.wait(1)
+		for _, obj in pairs(workspace:GetDescendants()) do
+			if obj:IsA("ProximityPrompt") then
+				-- extend distance so we can reach it from further back
+				obj.MaxActivationDistance = 10
+				obj.RequiresLineOfSight = false
+			end
+		end
+	end
+end)
+
+-- pathfinding params
 local pathParams = {
 	AgentRadius = 3, 
 	AgentHeight = 5,
@@ -183,7 +251,7 @@ if not visualsFolder then
 	visualsFolder.Parent = workspace
 end
 
--- raycast straight down to find the real floor so lines don't clip
+-- shoot a ray down so we can snap the visual path to the floor
 local function getFloorPos(pos)
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
@@ -200,9 +268,9 @@ local function getFloorPos(pos)
 	return pos - Vector3.new(0, 2.3, 0)
 end
 
+-- object pool so drawing lines doesn't lag the game
+local partPool = {}
 local function drawWaypoints(waypoints)
-	for _, child in ipairs(visualsFolder:GetChildren()) do child:Destroy() end
-	
 	local maxWpToDraw = math.min(#waypoints, 25) 
 	
 	for i = 1, maxWpToDraw - 1 do 
@@ -212,11 +280,16 @@ local function drawWaypoints(waypoints)
 		local distance = (p1 - p2).Magnitude
 		local cframe = CFrame.lookAt(p1, p2) * CFrame.new(0, 0, -distance / 2)
 		
-		local part = Instance.new("Part")
-		part.Anchored = true
-		part.CanCollide = false 
-		part.CanQuery = false
-		part.Material = Enum.Material.Neon
+		local part = partPool[i]
+		if not part then
+			part = Instance.new("Part")
+			part.Anchored = true
+			part.CanCollide = false 
+			part.CanQuery = false
+			part.Material = Enum.Material.Neon
+			part.Parent = visualsFolder
+			partPool[i] = part
+		end
 		
 		part.Size = Vector3.new(0.8, 0.1, distance) 
 		part.CFrame = cframe
@@ -228,42 +301,73 @@ local function drawWaypoints(waypoints)
 			part.Color = currentTheme.Accent 
 		end
 	end
+
+	for i = maxWpToDraw, #partPool do
+		if partPool[i] then partPool[i].Parent = nil end
+	end
 end
 
 local currentWaypoints = {}
 local currentWpIndex = 1
 local isNoclipping = false
 
--- basic noclip so we don't get stuck on props
+-- noclip handler for when we get stuck
 RunService.Stepped:Connect(function()
 	if isNoclipping and alive() then
 		local c = player.Character
 		if c then
 			for _, v in ipairs(c:GetDescendants()) do
-				if v:IsA("BasePart") then
-					v.CanCollide = false
-				end
+				if v:IsA("BasePart") then v.CanCollide = false end
 			end
 		end
 	end
 end)
 
--- loop to recalculate the path constantly
+-- path creation loop
+local lastComputedTargetPos = nil
 task.spawn(function()
 	while not dead do
 		task.wait(0.5) 
-		if running and alive() and not inRing() and not isPausedForSafety then
+		if running and alive() and not isPausedForSafety then
 			local c, h, r = getLatest()
 			if r then
-				local path = PathfindingService:CreatePath(pathParams)
-				local success = pcall(function() path:ComputeAsync(r.Position, DEST.Position) end)
+				local targetPos = DEST.Position
+				local shouldPath = false
 				
-				if success and path.Status == Enum.PathStatus.Success then
-					local wps = path:GetWaypoints()
-					if #wps > 1 then
-						currentWaypoints = wps
-						currentWpIndex = 2 
-						drawWaypoints(currentWaypoints)
+				if role == "HEALER" then
+					currentHealTarget = getClosestHurtPlayer()
+					
+					-- update highlight
+					if currentHealTarget and currentHealTarget.Character then
+						targetHighlight.Adornee = currentHealTarget.Character
+						local tr = currentHealTarget.Character:FindFirstChild("HumanoidRootPart")
+						if tr then
+							targetPos = tr.Position
+							shouldPath = true
+						end
+					else
+						targetHighlight.Adornee = nil
+					end
+				else
+					targetHighlight.Adornee = nil
+					if not inRing() then shouldPath = true end
+				end
+				
+				if shouldPath and targetPos then
+					-- only recalc path if target moved 5+ studs, saves processing power
+					if not lastComputedTargetPos or (lastComputedTargetPos - targetPos).Magnitude > 5 or #currentWaypoints == 0 then
+						local path = PathfindingService:CreatePath(pathParams)
+						local success = pcall(function() path:ComputeAsync(r.Position, targetPos) end)
+						
+						if success and path.Status == Enum.PathStatus.Success then
+							local wps = path:GetWaypoints()
+							if #wps > 1 then
+								lastComputedTargetPos = targetPos
+								currentWaypoints = wps
+								currentWpIndex = 2 
+								drawWaypoints(currentWaypoints)
+							end
+						end
 					end
 				end
 			end
@@ -271,11 +375,14 @@ task.spawn(function()
 	end
 end)
 
--- loop to keep walking to the next waypoint
+-- physical movement loop
 task.spawn(function()
 	while not dead do
 		task.wait(0.05) 
-		if running and alive() and not inRing() and not isPausedForSafety then
+		if running and alive() and not isPausedForSafety then
+			-- chill if we're doing ring stuff and already there
+			if role ~= "HEALER" and inRing() then continue end
+			
 			local c, h, r = getLatest()
 			if h and r and #currentWaypoints > 0 and currentWpIndex <= #currentWaypoints then
 				local wp = currentWaypoints[currentWpIndex]
@@ -286,6 +393,7 @@ task.spawn(function()
 				
 				pcall(function() h:MoveTo(wp.Position) end)
 				
+				-- check if we're close enough to the next node to advance
 				local dist = (r.Position * Vector3.new(1,0,1) - wp.Position * Vector3.new(1,0,1)).Magnitude
 				if dist < 4.5 then
 					currentWpIndex += 1
@@ -295,49 +403,118 @@ task.spawn(function()
 	end
 end)
 
--- un-stuck logic in case the bot gets trapped
-local lastPos = Vector3.new()
-local stuckTicks = 0
+-- anti stuck system (4 sec cooldown, 2 stud check)
+local checkPos = Vector3.new()
+local timeStuck = 0
 task.spawn(function()
 	while not dead do
-		task.wait(0.5)
-		if running and alive() and not inRing() and not isPausedForSafety then
+		task.wait(1)
+		if running and alive() and not isPausedForSafety then
+			if role ~= "HEALER" and inRing() then continue end
+			
 			local c, h, r = getLatest()
 			if r then
-				local distMoved = (r.Position * Vector3.new(1,0,1) - lastPos * Vector3.new(1,0,1)).Magnitude
-				local distToDest = (r.Position * Vector3.new(1,0,1) - DEST.Position * Vector3.new(1,0,1)).Magnitude
+				local destPos = DEST.Position
+				local isPathingToHeal = false
 				
-				if distMoved < 1.5 and distToDest > 6 then
-					stuckTicks += 1
-					if stuckTicks >= 3 then 
-						setStatus("Stuck! Breaching wall...")
-						h.Jump = true
-						isNoclipping = true
-						
-						pcall(function()
-							r.CFrame = r.CFrame + (r.CFrame.LookVector * 4)
-						end)
-						
-						task.delay(1.5, function() isNoclipping = false end)
-						stuckTicks = 0
+				if role == "HEALER" then
+					if currentHealTarget and currentHealTarget.Character then
+						local tr = currentHealTarget.Character:FindFirstChild("HumanoidRootPart")
+						if tr then 
+							destPos = tr.Position 
+							isPathingToHeal = true
+						end
 					end
-				else
-					stuckTicks = 0
 				end
-				lastPos = r.Position
+				
+				-- don't try to unstuck if we're just waiting for someone to get hurt
+				if role == "HEALER" and not isPathingToHeal then
+					checkPos = r.Position
+					timeStuck = 0
+					continue
+				end
+				
+				local distMoved = (r.Position * Vector3.new(1,0,1) - checkPos * Vector3.new(1,0,1)).Magnitude
+				local distToDest = (r.Position * Vector3.new(1,0,1) - destPos * Vector3.new(1,0,1)).Magnitude
+				
+				if distToDest > 6 then
+					if distMoved < 2 then
+						timeStuck += 1
+						if timeStuck >= 4 then
+							setStatus("stuck! popping noclip and pushing forward...")
+							h.Jump = true
+							isNoclipping = true
+							
+							-- micro teleport to phase through obstacles
+							pcall(function() r.CFrame = r.CFrame + (r.CFrame.LookVector * 4) end)
+							
+							task.delay(1.5, function() isNoclipping = false end)
+							timeStuck = 0
+							checkPos = r.Position
+						end
+					else
+						-- not stuck, update anchor point
+						timeStuck = 0
+						checkPos = r.Position
+					end
+				end
 			end
 		end
 	end
 end)
 
--- main states logic
+-- healing logic
+local EQUIP_WAIT_TIME = 3.5 
+local SPAM_DURATION = 1.2   
+
+local function performHealSequence(targetPlayer)
+	local char = player.Character
+	local bp = player:FindFirstChild("Backpack")
+	if not char or not bp or not targetPlayer.Character then return end
+	
+	local remoteFolder = ReplicatedStorage:FindFirstChild("Remote")
+	local healRemote = remoteFolder and remoteFolder:FindFirstChild("AttemptHeal")
+	if not healRemote then return end
+
+	local function useTool(toolName)
+		local tool = bp:FindFirstChild(toolName) or char:FindFirstChild(toolName)
+		if tool then
+			tool.Parent = char 
+			
+			-- wait for the tool animation to finish
+			task.wait(EQUIP_WAIT_TIME)
+			
+			local t = 0
+			while t < SPAM_DURATION and char:FindFirstChild(toolName) and targetPlayer.Character do
+				local tr = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+				local hrp = char:FindFirstChild("HumanoidRootPart")
+				
+				-- only fire if we're actually close enough
+				if tr and hrp and (hrp.Position - tr.Position).Magnitude <= 10 then 
+					healRemote:FireServer(targetPlayer)
+				end
+				
+				t += task.wait(0.05)
+			end
+		end
+	end
+
+	-- do medkit then quickfix
+	useTool("Medical Kit")
+	useTool("Quick-Fix")
+
+	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	if humanoid then humanoid:UnequipTools() end
+end
+
+-- main state loop: handles what the bot is supposed to be doing right now
 task.spawn(function()
 	while not dead do
 		task.wait(0.1) 
 		local success = pcall(function()
 			if running then
 				if not alive() then
-					setStatus("Waiting to respawn...")
+					setStatus("waiting to respawn...")
 					currentWaypoints = {} 
 					task.wait(1.5) 
 					return 
@@ -346,19 +523,41 @@ task.spawn(function()
 				if role == "FARMER" then
 					if inRing() then
 						currentWaypoints = {}
-						setStatus("in ring — chilling")
+						setStatus("in ring — idling")
 					else
-						setStatus("pathing to ring...")
+						setStatus("walking to safe zone...")
 					end
 				elseif role == "FEEDER" then
 					if inRing() then
 						currentWaypoints = {}
-						setStatus("Resetting...")
+						setStatus("resetting character...")
 						local c, h, r = getLatest()
 						if h then h.Health = 0 end
 						task.wait(1)
 					else
-						setStatus("pathing to death...")
+						setStatus("walking to destination...")
+					end
+				elseif role == "HEALER" then
+					if currentHealTarget and currentHealTarget.Character then
+						local tr = currentHealTarget.Character:FindFirstChild("HumanoidRootPart")
+						local c, h, r = getLatest()
+						if r and tr then
+							local dist = (r.Position - tr.Position).Magnitude
+							
+							-- FIXED: stop at exactly 3 studs away so we dont clip inside their head
+							if dist <= 3 then
+								currentWaypoints = {} 
+								lastComputedTargetPos = nil 
+								stopCharacter()
+								setStatus("healing: " .. currentHealTarget.DisplayName)
+								performHealSequence(currentHealTarget)
+								task.wait(0.5) 
+							else
+								setStatus("moving to " .. currentHealTarget.DisplayName)
+							end
+						end
+					else
+						setStatus("looking for hurt players...")
 					end
 				end
 			end
@@ -367,8 +566,8 @@ task.spawn(function()
 end)
 
 
+-- ui stuff down below
 local mobileMode = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-
 local tweenFast = TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 local tweenSmooth = TweenInfo.new(0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 
@@ -420,7 +619,6 @@ local function createGlow(parent, size, pos, transparency, rotation)
 		NumberSequenceKeypoint.new(0, 0.18),
 		NumberSequenceKeypoint.new(1, 1)
 	}
-
 	return glow, grad
 end
 
@@ -441,7 +639,6 @@ local function notify(titleText, bodyText)
 	makeCorner(notif, 12)
 
 	local notifGradient = makeGradient(notif, 135)
-
 	local notifStroke = Instance.new("UIStroke")
 	notifStroke.Parent = notif
 	notifStroke.Thickness = 1
@@ -485,12 +682,8 @@ local function notify(titleText, bodyText)
 	notifBody.TextColor3 = currentTheme.SubText
 
 	table.insert(activeNotifications, {
-		Frame = notif,
-		Gradient = notifGradient,
-		Stroke = notifStroke,
-		Accent = accentBar,
-		Title = notifTitle,
-		Body = notifBody
+		Frame = notif, Gradient = notifGradient, Stroke = notifStroke,
+		Accent = accentBar, Title = notifTitle, Body = notifBody
 	})
 
 	tweenObject(notif, TweenInfo.new(0.28, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, 62), BackgroundTransparency = 0})
@@ -509,10 +702,7 @@ local function notify(titleText, bodyText)
 			local closeTween = tweenObject(notif, TweenInfo.new(0.24, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Size = UDim2.new(1, 0, 0, 0), BackgroundTransparency = 1})
 			closeTween.Completed:Connect(function()
 				for i, data in ipairs(activeNotifications) do
-					if data.Frame == notif then
-						table.remove(activeNotifications, i)
-						break
-					end
+					if data.Frame == notif then table.remove(activeNotifications, i); break end
 				end
 				notif:Destroy()
 			end)
@@ -527,10 +717,12 @@ screenGui.DisplayOrder = 999999999
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 screenGui.Parent = playerGui
 
+-- global cleanup trigger for when we rerun the script
 _G.AsylumFarmKill = function()
 	dead = true
 	running = false
 	role = nil
+	if targetHighlight then targetHighlight:Destroy() end
 	if screenGui and screenGui.Parent then screenGui:Destroy() end
 	_G.AsylumFarmKill = nil
 end
@@ -617,7 +809,6 @@ titleFix.Parent = titleBar
 titleFix.BorderSizePixel = 0
 titleFix.Size = UDim2.new(1, 0, 0, 18)
 titleFix.Position = UDim2.new(0, 0, 1, -18)
-
 local topGradient = makeGradient(titleBar, 0)
 
 local title = Instance.new("TextLabel")
@@ -738,10 +929,23 @@ local feederGrad = makeGradient(feederBtn, 135)
 local feederStroke = Instance.new("UIStroke", feederBtn)
 feederStroke.Thickness = 1
 
+local healerBtn = Instance.new("TextButton")
+healerBtn.Parent = page1
+healerBtn.Size = UDim2.new(0, 120, 0, 42)
+healerBtn.Position = UDim2.new(0, 10, 0, 60)
+healerBtn.Font = Enum.Font.GothamBold
+healerBtn.TextSize = 13
+healerBtn.Text = "HEALER"
+healerBtn.AutoButtonColor = false
+makeCorner(healerBtn, 8)
+local healerGrad = makeGradient(healerBtn, 135)
+local healerStroke = Instance.new("UIStroke", healerBtn)
+healerStroke.Thickness = 1
+
 local statusLbl = Instance.new("TextLabel")
 statusLbl.Parent = page1
 statusLbl.BackgroundTransparency = 1
-statusLbl.Position = UDim2.new(0, 12, 0, 68)
+statusLbl.Position = UDim2.new(0, 12, 0, 110)
 statusLbl.Size = UDim2.new(1, -20, 0, 20)
 statusLbl.Font = Enum.Font.Gotham
 statusLbl.TextSize = 13
@@ -751,21 +955,24 @@ statusLbl.Text = "Status: idle"
 local GREEN_ACTIVE = Color3.fromRGB(38, 155, 65)
 
 updateFarmBtns = function()
-	if role == "FARMER" and running then
-		farmerGrad.Color = ColorSequence.new(GREEN_ACTIVE)
-		feederGrad.Color = currentTheme.Button
-		farmerBtn.Text = "FARMER ●"
-		feederBtn.Text = "FEEDER"
-	elseif role == "FEEDER" and running then
-		feederGrad.Color = ColorSequence.new(GREEN_ACTIVE)
-		farmerGrad.Color = currentTheme.Button
-		feederBtn.Text = "FEEDER ●"
-		farmerBtn.Text = "FARMER"
-	else
-		farmerGrad.Color = currentTheme.Button
-		feederGrad.Color = currentTheme.Button
-		farmerBtn.Text = "FARMER"
-		feederBtn.Text = "FEEDER"
+	farmerGrad.Color = currentTheme.Button
+	feederGrad.Color = currentTheme.Button
+	healerGrad.Color = currentTheme.Button
+	farmerBtn.Text = "FARMER"
+	feederBtn.Text = "FEEDER"
+	healerBtn.Text = "HEALER"
+
+	if running then
+		if role == "FARMER" then
+			farmerGrad.Color = ColorSequence.new(GREEN_ACTIVE)
+			farmerBtn.Text = "FARMER ●"
+		elseif role == "FEEDER" then
+			feederGrad.Color = ColorSequence.new(GREEN_ACTIVE)
+			feederBtn.Text = "FEEDER ●"
+		elseif role == "HEALER" then
+			healerGrad.Color = ColorSequence.new(GREEN_ACTIVE)
+			healerBtn.Text = "HEALER ●"
+		end
 	end
 end
 
@@ -776,11 +983,12 @@ end
 farmerBtn.MouseButton1Click:Connect(function()
 	if role == "FARMER" and running then
 		running = false; role = nil
+		targetHighlight.Adornee = nil
 		stopCharacter()
-		setStatus("idle")
+		setStatus("Idle")
 	else
 		role = "FARMER"; running = true
-		setStatus("starting")
+		setStatus("Initializing...")
 	end
 	updateFarmBtns()
 end)
@@ -788,11 +996,26 @@ end)
 feederBtn.MouseButton1Click:Connect(function()
 	if role == "FEEDER" and running then
 		running = false; role = nil
+		targetHighlight.Adornee = nil
 		stopCharacter()
-		setStatus("idle")
+		setStatus("Idle")
 	else
 		role = "FEEDER"; running = true
-		setStatus("starting")
+		setStatus("Initializing...")
+	end
+	updateFarmBtns()
+end)
+
+healerBtn.MouseButton1Click:Connect(function()
+	if role == "HEALER" and running then
+		running = false; role = nil
+		targetHighlight.Adornee = nil
+		stopCharacter()
+		setStatus("Idle")
+	else
+		role = "HEALER"; running = true
+		setStatus("Initializing Auto-Heal...")
+		removeDoors()
 	end
 	updateFarmBtns()
 end)
@@ -860,7 +1083,6 @@ themePage.Parent = pagesHolder
 themePage.Size = UDim2.new(1, 0, 1, 0)
 themePage.BackgroundTransparency = 1
 themePage.Visible = false
-
 
 local themeScroll = Instance.new("ScrollingFrame")
 themeScroll.Parent = themePage
@@ -953,7 +1175,6 @@ local categories = {
 	{Name = "Settings", Page = themePage, Title = "Settings"}
 }
 
--- custom transparency so the text stays readable like real glass
 local function applyGlobalTransparency(val)
 	val = math.clamp(val, 0, 100)
 	local alpha = val / 100
@@ -965,29 +1186,24 @@ local function applyGlobalTransparency(val)
 	local function setTrans(inst)
 		if inst:IsA("GuiObject") then
 			if inst:GetAttribute("OrigBg") == nil then inst:SetAttribute("OrigBg", inst.BackgroundTransparency) end
-			-- background gets up to 90% transparent
 			inst.BackgroundTransparency = inst:GetAttribute("OrigBg") + ((1 - inst:GetAttribute("OrigBg")) * (alpha * 0.90))
 		end
 		if inst:IsA("TextLabel") or inst:IsA("TextButton") or inst:IsA("TextBox") then
 			if inst:GetAttribute("OrigTxt") == nil then inst:SetAttribute("OrigTxt", inst.TextTransparency) end
-			-- text only fades 20% max so you can still read it
 			inst.TextTransparency = inst:GetAttribute("OrigTxt") + ((1 - inst:GetAttribute("OrigTxt")) * (alpha * 0.2))
 		end
 		if inst:IsA("UIStroke") then
 			if inst:GetAttribute("OrigStr") == nil then inst:SetAttribute("OrigStr", inst.Transparency) end
-			-- borders fade 40% max to keep the shape defined
 			inst.Transparency = inst:GetAttribute("OrigStr") + ((1 - inst:GetAttribute("OrigStr")) * (alpha * 0.4))
 		end
 	end
 
-	-- loop through the main gui, but purposefully don't touch the toggleButton
 	setTrans(mainFrame)
 	for _, child in ipairs(mainFrame:GetDescendants()) do 
 		setTrans(child) 
 	end
 end
 
--- handling the slider drag
 local draggingSlider = false
 sliderKnob.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -1337,10 +1553,13 @@ local function applyTheme(themeName)
 
 	if role ~= "FARMER" then farmerGrad.Color = theme.Button end
 	if role ~= "FEEDER" then feederGrad.Color = theme.Button end
+	if role ~= "HEALER" then healerGrad.Color = theme.Button end
 	farmerStroke.Color = theme.Stroke
 	feederStroke.Color = theme.Stroke
+	healerStroke.Color = theme.Stroke
 	farmerBtn.TextColor3 = theme.Text
 	feederBtn.TextColor3 = theme.Text
+	healerBtn.TextColor3 = theme.Text
 	statusLbl.TextColor3 = theme.SubText
 
 	previewGradient.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, theme.Accent), ColorSequenceKeypoint.new(1, theme.Accent2)}
@@ -1368,10 +1587,23 @@ local function applyTheme(themeName)
 	for _, data in pairs(whitelistButtons) do
 		if data.Update then data.Update() end
 	end
+	
+	-- refresh the path visuals to match the new theme
+	if visualsFolder then
+		for _, part in ipairs(visualsFolder:GetChildren()) do
+			if part:IsA("Part") and part.Color ~= Color3.fromRGB(255, 100, 100) then
+				part.Color = theme.Accent
+			end
+		end
+	end
+	
+	-- sync the highlight color
+	if targetHighlight then
+		targetHighlight.FillColor = theme.Accent
+	end
 
 	refreshPlayerList()
 	
-	-- refresh transparency so it applies properly when swapping themes
 	local percentage = (math.clamp(tonumber(string.match(sliderTitle.Text, "%d+")) or 0, 0, 100)) / 100
 	applyGlobalTransparency(percentage * 100)
 end
@@ -1560,7 +1792,10 @@ task.spawn(function()
 	notify("Detection", "Range: " .. tostring(DETECTION_RANGE))
 end)
 
-RunService.RenderStepped:Connect(function(deltaTime)
+RunService.Heartbeat:Connect(function(deltaTime)
+	-- bypass safety if we are healing so it doesnt kill us randomly
+	if role == "HEALER" then return end
+
 	if not detectionEnabled or not detectionPosition then return end
 
 	lastCheck += deltaTime
