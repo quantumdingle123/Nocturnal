@@ -251,57 +251,72 @@ if not visualsFolder then
 	visualsFolder.Parent = workspace
 end
 
--- shoot a ray down so we can snap the visual path to the floor
-local function getFloorPos(pos)
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = {player.Character, visualsFolder} 
-	
-	local origin = pos + Vector3.new(0, 5, 0)
-	local direction = Vector3.new(0, -30, 0)
-	
-	local result = workspace:Raycast(origin, direction, params)
-	if result then
-		return result.Position + Vector3.new(0, 0.05, 0)
-	end
-	
-	return pos - Vector3.new(0, 2.3, 0)
-end
-
--- object pool so drawing lines doesn't lag the game
+-- FIX: We now use two object pools, one for the lines, one for smooth sphere joints
 local partPool = {}
+local jointPool = {}
+
 local function drawWaypoints(waypoints)
-	local maxWpToDraw = math.min(#waypoints, 25) 
+	-- limit how many we draw so we don't lag the game if a path is massive
+	local maxWpToDraw = math.min(#waypoints, 40) 
 	
-	for i = 1, maxWpToDraw - 1 do 
-		local p1 = getFloorPos(waypoints[i].Position)
-		local p2 = getFloorPos(waypoints[i+1].Position)
+	for i = 1, maxWpToDraw do
+		-- Set visuals slightly above ground to prevent z-fighting/invisibility
+		local pos = waypoints[i].Position + Vector3.new(0, 0.5, 0)
 		
-		local distance = (p1 - p2).Magnitude
-		local cframe = CFrame.lookAt(p1, p2) * CFrame.new(0, 0, -distance / 2)
-		
-		local part = partPool[i]
-		if not part then
-			part = Instance.new("Part")
-			part.Anchored = true
-			part.CanCollide = false 
-			part.CanQuery = false
-			part.Material = Enum.Material.Neon
-			part.Parent = visualsFolder
-			partPool[i] = part
+		-- 1. Draw smooth joints (spheres)
+		local joint = jointPool[i]
+		if not joint then
+			joint = Instance.new("Part")
+			joint.Shape = Enum.PartType.Ball
+			joint.Anchored = true
+			joint.CanCollide = false
+			joint.CanQuery = false
+			joint.Material = Enum.Material.Neon
+			joint.Parent = visualsFolder
+			jointPool[i] = joint
 		end
 		
-		part.Size = Vector3.new(0.8, 0.1, distance) 
-		part.CFrame = cframe
-		part.Parent = visualsFolder
+		joint.Size = Vector3.new(1.2, 1.2, 1.2)
+		joint.Position = pos
+		joint.Color = currentTheme.Accent
+		joint.Parent = visualsFolder
 		
-		if waypoints[i+1].Action == Enum.PathWaypointAction.Jump then
-			part.Color = Color3.fromRGB(255, 100, 100)
-		else
-			part.Color = currentTheme.Accent 
+		-- 2. Draw lines connecting the joints (cylinders)
+		if i < maxWpToDraw then
+			local nextPos = waypoints[i+1].Position + Vector3.new(0, 0.5, 0)
+			local dist = (pos - nextPos).Magnitude
+			
+			local line = partPool[i]
+			if not line then
+				line = Instance.new("Part")
+				line.Shape = Enum.PartType.Cylinder
+				line.Anchored = true
+				line.CanCollide = false 
+				line.CanQuery = false
+				line.Material = Enum.Material.Neon
+				line.Parent = visualsFolder
+				partPool[i] = line
+			end
+			
+			-- To make cylinder point correctly, we rotate it 90 degrees on Y and Z
+			line.Size = Vector3.new(dist, 0.8, 0.8) 
+			local lookAtCFrame = CFrame.lookAt(pos, nextPos)
+			line.CFrame = lookAtCFrame * CFrame.new(0, 0, -dist/2) * CFrame.Angles(0, math.rad(90), 0)
+			line.Parent = visualsFolder
+			
+			if waypoints[i+1].Action == Enum.PathWaypointAction.Jump then
+				line.Color = Color3.fromRGB(255, 100, 100)
+				joint.Color = Color3.fromRGB(255, 100, 100)
+			else
+				line.Color = currentTheme.Accent
+			end
 		end
 	end
 
+	-- cleanup unused parts and joints from previous longer paths
+	for i = maxWpToDraw + 1, #jointPool do
+		if jointPool[i] then jointPool[i].Parent = nil end
+	end
 	for i = maxWpToDraw, #partPool do
 		if partPool[i] then partPool[i].Parent = nil end
 	end
@@ -325,6 +340,8 @@ end)
 
 -- path creation loop
 local lastComputedTargetPos = nil
+local forceRecalculateTimer = 0
+
 task.spawn(function()
 	while not dead do
 		task.wait(0.5) 
@@ -354,8 +371,11 @@ task.spawn(function()
 				end
 				
 				if shouldPath and targetPos then
-					-- only recalc path if target moved 5+ studs, saves processing power
-					if not lastComputedTargetPos or (lastComputedTargetPos - targetPos).Magnitude > 5 or #currentWaypoints == 0 then
+					forceRecalculateTimer += 0.5
+					
+					-- FIX: Recalculate instantly if target moves 2+ studs OR automatically every 1.5 seconds to prevent getting stuck
+					if not lastComputedTargetPos or (lastComputedTargetPos - targetPos).Magnitude > 2 or forceRecalculateTimer >= 1.5 or #currentWaypoints == 0 then
+						forceRecalculateTimer = 0 
 						local path = PathfindingService:CreatePath(pathParams)
 						local success = pcall(function() path:ComputeAsync(r.Position, targetPos) end)
 						
@@ -513,23 +533,35 @@ task.spawn(function()
 		task.wait(0.1) 
 		local success = pcall(function()
 			if running then
+				-- Completely wipe old path data when dead so it calculates a fresh path from spawn when alive again
 				if not alive() then
 					setStatus("waiting to respawn...")
 					currentWaypoints = {} 
+					lastComputedTargetPos = nil
+					currentWpIndex = 1
 					task.wait(1.5) 
 					return 
 				end
 
 				if role == "FARMER" then
 					if inRing() then
-						currentWaypoints = {}
+						if #currentWaypoints > 0 then
+							currentWaypoints = {}
+							lastComputedTargetPos = nil
+							currentWpIndex = 1
+							stopCharacter()
+						end
 						setStatus("in ring — idling")
 					else
 						setStatus("walking to safe zone...")
 					end
 				elseif role == "FEEDER" then
 					if inRing() then
+						-- Clear waypoints and explicitly stop movement *before* killing the player to stop freaking out
 						currentWaypoints = {}
+						lastComputedTargetPos = nil
+						currentWpIndex = 1
+						stopCharacter()
 						setStatus("resetting character...")
 						local c, h, r = getLatest()
 						if h then h.Health = 0 end
@@ -544,10 +576,11 @@ task.spawn(function()
 						if r and tr then
 							local dist = (r.Position - tr.Position).Magnitude
 							
-							-- FIXED: stop at exactly 3 studs away so we dont clip inside their head
+							-- stop at exactly 3 studs away so we dont clip inside their head
 							if dist <= 3 then
 								currentWaypoints = {} 
 								lastComputedTargetPos = nil 
+								currentWpIndex = 1
 								stopCharacter()
 								setStatus("healing: " .. currentHealTarget.DisplayName)
 								performHealSequence(currentHealTarget)
@@ -984,6 +1017,9 @@ farmerBtn.MouseButton1Click:Connect(function()
 	if role == "FARMER" and running then
 		running = false; role = nil
 		targetHighlight.Adornee = nil
+		currentWaypoints = {}
+		lastComputedTargetPos = nil
+		currentWpIndex = 1
 		stopCharacter()
 		setStatus("Idle")
 	else
@@ -997,6 +1033,9 @@ feederBtn.MouseButton1Click:Connect(function()
 	if role == "FEEDER" and running then
 		running = false; role = nil
 		targetHighlight.Adornee = nil
+		currentWaypoints = {}
+		lastComputedTargetPos = nil
+		currentWpIndex = 1
 		stopCharacter()
 		setStatus("Idle")
 	else
@@ -1010,6 +1049,9 @@ healerBtn.MouseButton1Click:Connect(function()
 	if role == "HEALER" and running then
 		running = false; role = nil
 		targetHighlight.Adornee = nil
+		currentWaypoints = {}
+		lastComputedTargetPos = nil
+		currentWpIndex = 1
 		stopCharacter()
 		setStatus("Idle")
 	else
@@ -1848,6 +1890,13 @@ RunService.Heartbeat:Connect(function(deltaTime)
 			savedRole = role
 			running = false
 			isPausedForSafety = true
+			
+			-- Stop character and wipe data completely before terminating to avoid stuck paths upon resumption
+			currentWaypoints = {}
+			lastComputedTargetPos = nil
+			currentWpIndex = 1
+			stopCharacter()
+
 			updateFarmBtns()
 			setStatus("TERMINATING")
 			
