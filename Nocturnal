@@ -569,6 +569,22 @@ plrs.PlayerRemoving:Connect(function(p)
     updatePauseStatus()
 end)
 
+local arenaCFrame = CFrame.new(-20.6, 256.0, -595.1, -0.973349154, -4.88010841e-08, -0.229328111, -4.29342961e-08, 1, -3.05720071e-08, 0.229328111, -1.99111962e-08, -0.973349154)
+local arenaSize = Vector3.new(31, 15, 15)
+
+local function isPlayerInArena(char)
+    if not char then return false end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return false end
+    
+    local localPos = arenaCFrame:PointToObjectSpace(root.Position)
+    local halfSize = arenaSize / 2
+    
+    return math.abs(localPos.X) <= halfSize.X 
+       and math.abs(localPos.Y) <= halfSize.Y 
+       and math.abs(localPos.Z) <= halfSize.Z
+end
+
 local targetCFrame = CFrame.new(-9.65371513, 255.272766, -611.338257, -0.797527432, -1.24680053e-08, 0.60328269, -5.25633981e-09, 1, 1.37181635e-08, -0.60328269, 7.769553e-09, -0.797527432)
 local targetPosition = targetCFrame.Position 
 
@@ -576,57 +592,60 @@ local pathParams = { AgentRadius = 2, AgentHeight = 5, AgentCanJump = true, Agen
 local path = PathfindingService:CreatePath(pathParams)
 local isWalking = false
 
-local function walkToTarget(character, humanoid, rootPart)
+me.CharacterAdded:Connect(function()
+    isWalking = false
+end)
+
+local function walkToTarget(char, hum, root)
     local function scanSurroundings()
-        local rayOrigin = rootPart.Position
-        local rayDirection = rootPart.CFrame.LookVector * 3 
+        local rayOrigin = root.Position
+        local rayDirection = root.CFrame.LookVector * 3 
         local raycastParams = RaycastParams.new()
-        raycastParams.FilterDescendantsInstances = {character}
+        raycastParams.FilterDescendantsInstances = {char}
         raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-        if workspace:Raycast(rayOrigin, rayDirection, raycastParams) then humanoid.Jump = true end
+        if workspace:Raycast(rayOrigin, rayDirection, raycastParams) then hum.Jump = true end
     end
 
-    while autoFarmData.IsActive and character:GetAttribute("InPA") == true and (rootPart.Position - targetPosition).Magnitude > 1.5 do
-        
+    while autoFarmData.IsActive and not isPlayerInArena(char) and hum.Health > 0 and (root.Position - targetPosition).Magnitude > 1.5 do
         if getgenv().IsFarmPaused then
-            humanoid:MoveTo(rootPart.Position) 
-            while getgenv().IsFarmPaused and autoFarmData.IsActive do
+            hum:MoveTo(root.Position) 
+            while getgenv().IsFarmPaused and autoFarmData.IsActive and hum.Health > 0 do
                 task.wait(0.5) 
             end
-            if not autoFarmData.IsActive then break end 
+            if not autoFarmData.IsActive or hum.Health <= 0 then break end 
         end
 
-        local success, _ = pcall(function() path:ComputeAsync(rootPart.Position, targetPosition) end)
+        local success, _ = pcall(function() path:ComputeAsync(root.Position, targetPosition) end)
 
         if success and path.Status == Enum.PathStatus.Success then
             local waypoints = path:GetWaypoints()
 
             for _, waypoint in ipairs(waypoints) do
-                if not autoFarmData.IsActive then break end
-                if character:GetAttribute("InPA") == nil then break end 
+                if not autoFarmData.IsActive or hum.Health <= 0 then break end
+                if isPlayerInArena(char) then break end 
                 if getgenv().IsFarmPaused then break end 
-                if (rootPart.Position - targetPosition).Magnitude <= 1.5 then break end
+                if (root.Position - targetPosition).Magnitude <= 1.5 then break end
 
-                if waypoint.Action == Enum.PathWaypointAction.Jump then humanoid.Jump = true end
+                if waypoint.Action == Enum.PathWaypointAction.Jump then hum.Jump = true end
 
-                humanoid:MoveTo(waypoint.Position)
+                hum:MoveTo(waypoint.Position)
 
                 local moveConnection
                 local reached = false
                 local timeOut = tick() + 2 
 
-                moveConnection = humanoid.MoveToFinished:Connect(function() reached = true end)
+                moveConnection = hum.MoveToFinished:Connect(function() reached = true end)
 
                 while not reached and tick() < timeOut do
-                    if not autoFarmData.IsActive or character:GetAttribute("InPA") == nil or getgenv().IsFarmPaused then break end
+                    if not autoFarmData.IsActive or isPlayerInArena(char) or getgenv().IsFarmPaused or hum.Health <= 0 then break end
                     scanSurroundings()
                     task.wait(0.05)
                 end
 
                 moveConnection:Disconnect()
 
-                if not reached and autoFarmData.IsActive and not getgenv().IsFarmPaused then
-                    humanoid.Jump = true
+                if not reached and autoFarmData.IsActive and not getgenv().IsFarmPaused and hum.Health > 0 then
+                    hum.Jump = true
                     break
                 end
             end
@@ -635,10 +654,15 @@ local function walkToTarget(character, humanoid, rootPart)
         end
     end
     
-    if autoFarmData.IsActive and character:GetAttribute("InPA") == true and not getgenv().IsFarmPaused then
-        humanoid:MoveTo(targetPosition)
-        humanoid.MoveToFinished:Wait() 
-        rootPart.CFrame = targetCFrame
+    if autoFarmData.IsActive and not isPlayerInArena(char) and not getgenv().IsFarmPaused and hum.Health > 0 then
+        hum:MoveTo(targetPosition)
+        local t = tick() + 2
+        while (root.Position - targetPosition).Magnitude > 1 and tick() < t and hum.Health > 0 do
+            task.wait(0.1)
+        end
+        if hum.Health > 0 then
+            root.CFrame = targetCFrame
+        end
     end
 end
 
@@ -648,27 +672,23 @@ task.spawn(function()
         
         local char = me.Character
         if not char then continue end
-        local inPA = char:GetAttribute("InPA")
         
-        if inPA == true then
+        local hum = char:FindFirstChild("Humanoid")
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if not hum or not root or hum.Health <= 0 then continue end
+        
+        local insideArena = isPlayerInArena(char)
+        
+        if insideArena then
+            if autoFarmData.Mode == "Alt" then
+                hum.Health = 0 
+                char:BreakJoints()
+            end
+        else
             if not isWalking and not getgenv().IsFarmPaused then
                 isWalking = true
-                
-                local hum = char:FindFirstChild("Humanoid")
-                local root = char:FindFirstChild("HumanoidRootPart")
-                
-                if hum and root then
-                    walkToTarget(char, hum, root)
-                end
-                
+                walkToTarget(char, hum, root)
                 isWalking = false
-            end
-        elseif inPA == nil then
-            if autoFarmData.Mode == "Alt" then
-                local hum = char:FindFirstChild("Humanoid")
-                if hum and hum.Health > 0 then
-                    hum.Health = 0 
-                end
             end
         end
     end
