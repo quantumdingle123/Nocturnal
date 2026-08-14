@@ -590,13 +590,10 @@ local targetPosition = targetCFrame.Position
 
 local pathParams = { AgentRadius = 2, AgentHeight = 5, AgentCanJump = true, AgentJumpHeight = 10, AgentMaxSlope = 45 }
 local path = PathfindingService:CreatePath(pathParams)
-local isWalking = false
-
-me.CharacterAdded:Connect(function()
-    isWalking = false
-end)
 
 local function walkToTarget(char, hum, root)
+    char:SetAttribute("IsWalking", true)
+    
     local function scanSurroundings()
         local rayOrigin = root.Position
         local rayDirection = root.CFrame.LookVector * 3 
@@ -606,13 +603,13 @@ local function walkToTarget(char, hum, root)
         if workspace:Raycast(rayOrigin, rayDirection, raycastParams) then hum.Jump = true end
     end
 
-    while autoFarmData.IsActive and not isPlayerInArena(char) and hum.Health > 0 and (root.Position - targetPosition).Magnitude > 1.5 do
+    while autoFarmData.IsActive and char == me.Character and hum.Health > 0 and not isPlayerInArena(char) and (root.Position - targetPosition).Magnitude > 1.5 do
         if getgenv().IsFarmPaused then
             hum:MoveTo(root.Position) 
-            while getgenv().IsFarmPaused and autoFarmData.IsActive and hum.Health > 0 do
+            while getgenv().IsFarmPaused and autoFarmData.IsActive and hum.Health > 0 and char == me.Character do
                 task.wait(0.5) 
             end
-            if not autoFarmData.IsActive or hum.Health <= 0 then break end 
+            if not autoFarmData.IsActive or hum.Health <= 0 or char ~= me.Character then break end 
         end
 
         local success, _ = pcall(function() path:ComputeAsync(root.Position, targetPosition) end)
@@ -621,7 +618,7 @@ local function walkToTarget(char, hum, root)
             local waypoints = path:GetWaypoints()
 
             for _, waypoint in ipairs(waypoints) do
-                if not autoFarmData.IsActive or hum.Health <= 0 then break end
+                if not autoFarmData.IsActive or hum.Health <= 0 or char ~= me.Character then break end
                 if isPlayerInArena(char) then break end 
                 if getgenv().IsFarmPaused then break end 
                 if (root.Position - targetPosition).Magnitude <= 1.5 then break end
@@ -637,14 +634,14 @@ local function walkToTarget(char, hum, root)
                 moveConnection = hum.MoveToFinished:Connect(function() reached = true end)
 
                 while not reached and tick() < timeOut do
-                    if not autoFarmData.IsActive or isPlayerInArena(char) or getgenv().IsFarmPaused or hum.Health <= 0 then break end
+                    if not autoFarmData.IsActive or isPlayerInArena(char) or getgenv().IsFarmPaused or hum.Health <= 0 or char ~= me.Character then break end
                     scanSurroundings()
                     task.wait(0.05)
                 end
 
-                moveConnection:Disconnect()
+                if moveConnection then moveConnection:Disconnect() end
 
-                if not reached and autoFarmData.IsActive and not getgenv().IsFarmPaused and hum.Health > 0 then
+                if not reached and autoFarmData.IsActive and not getgenv().IsFarmPaused and hum.Health > 0 and char == me.Character then
                     hum.Jump = true
                     break
                 end
@@ -654,16 +651,18 @@ local function walkToTarget(char, hum, root)
         end
     end
     
-    if autoFarmData.IsActive and not isPlayerInArena(char) and not getgenv().IsFarmPaused and hum.Health > 0 then
+    if autoFarmData.IsActive and char == me.Character and not isPlayerInArena(char) and not getgenv().IsFarmPaused and hum.Health > 0 then
         hum:MoveTo(targetPosition)
         local t = tick() + 2
-        while (root.Position - targetPosition).Magnitude > 1 and tick() < t and hum.Health > 0 do
+        while (root.Position - targetPosition).Magnitude > 1 and tick() < t and hum.Health > 0 and char == me.Character do
             task.wait(0.1)
         end
-        if hum.Health > 0 then
+        if hum.Health > 0 and char == me.Character then
             root.CFrame = targetCFrame
         end
     end
+    
+    if char then char:SetAttribute("IsWalking", false) end
 end
 
 task.spawn(function()
@@ -685,10 +684,10 @@ task.spawn(function()
                 char:BreakJoints()
             end
         else
-            if not isWalking and not getgenv().IsFarmPaused then
-                isWalking = true
-                walkToTarget(char, hum, root)
-                isWalking = false
+            if not char:GetAttribute("IsWalking") and not getgenv().IsFarmPaused then
+                task.spawn(function()
+                    walkToTarget(char, hum, root)
+                end)
             end
         end
     end
