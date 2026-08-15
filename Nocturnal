@@ -59,7 +59,7 @@ local allThemes = {
     Sapphire = { Main = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(10, 24, 50)), ColorSequenceKeypoint.new(0.5, Color3.fromRGB(18, 40, 78)), ColorSequenceKeypoint.new(1, Color3.fromRGB(28, 58, 108))}, Topbar = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(18, 36, 70)), ColorSequenceKeypoint.new(1, Color3.fromRGB(34, 62, 110))}, Button = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(42, 78, 132)), ColorSequenceKeypoint.new(1, Color3.fromRGB(58, 102, 166))}, ButtonHover = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(60, 110, 176)), ColorSequenceKeypoint.new(1, Color3.fromRGB(86, 142, 215))}, Accent = Color3.fromRGB(92, 170, 255), Accent2 = Color3.fromRGB(160, 215, 255), Text = Color3.fromRGB(240, 248, 255), SubText = Color3.fromRGB(180, 210, 235), Stroke = Color3.fromRGB(88, 132, 185), Glow = Color3.fromRGB(96, 180, 255) },
     Ruby = { Main = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(50, 10, 14)), ColorSequenceKeypoint.new(0.5, Color3.fromRGB(78, 18, 24)), ColorSequenceKeypoint.new(1, Color3.fromRGB(108, 28, 36))}, Topbar = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(70, 18, 24)), ColorSequenceKeypoint.new(1, Color3.fromRGB(110, 34, 44))}, Button = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(132, 42, 52)), ColorSequenceKeypoint.new(1, Color3.fromRGB(166, 58, 70))}, ButtonHover = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(176, 60, 75)), ColorSequenceKeypoint.new(1, Color3.fromRGB(215, 86, 100))}, Accent = Color3.fromRGB(255, 92, 105), Accent2 = Color3.fromRGB(255, 160, 170), Text = Color3.fromRGB(255, 240, 242), SubText = Color3.fromRGB(235, 180, 185), Stroke = Color3.fromRGB(185, 88, 98), Glow = Color3.fromRGB(255, 96, 110) },
     Emerald = { Main = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(10, 50, 24)), ColorSequenceKeypoint.new(0.5, Color3.fromRGB(18, 78, 40)), ColorSequenceKeypoint.new(1, Color3.fromRGB(28, 108, 58))}, Topbar = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(18, 70, 36)), ColorSequenceKeypoint.new(1, Color3.fromRGB(34, 110, 62))}, Button = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(42, 132, 78)), ColorSequenceKeypoint.new(1, Color3.fromRGB(58, 166, 102))}, ButtonHover = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(60, 176, 110)), ColorSequenceKeypoint.new(1, Color3.fromRGB(86, 215, 142))}, Accent = Color3.fromRGB(92, 255, 170), Accent2 = Color3.fromRGB(160, 255, 215), Text = Color3.fromRGB(240, 255, 248), SubText = Color3.fromRGB(180, 235, 210), Stroke = Color3.fromRGB(88, 185, 132), Glow = Color3.fromRGB(96, 255, 180) },
-    Amethyst = { Main = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 10, 50)), ColorSequenceKeypoint.new(0.5, Color3.fromRGB(48, 18, 78)), ColorSequenceKeypoint.new(1, Color3.fromRGB(68, 28, 108))}, Topbar = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(45, 18, 70)), ColorSequenceKeypoint.new(1, Color3.fromRGB(72, 34, 110))}, Button = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(86, 42, 132)), ColorSequenceKeypoint.new(1, Color3.fromRGB(112, 58, 166))}, ButtonHover = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(120, 60, 176)), ColorSequenceKeypoint.new(1, Color3.fromRGB(152, 86, 215))}, Accent = Color3.fromRGB(180, 92, 255), Accent2 = Color3.fromRGB(215, 160, 255), Text = Color3.fromRGB(248, 240, 255), SubText = Color3.fromRGB(215, 180, 235), Stroke = Color3.fromRGB(132, 88, 185), Glow = Color3.fromRGB(190, 96, 255) },
+    Amethyst = { Main = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 10, 50)), ColorSequenceKeypoint.new(0.5, Color3.fromRGB(48, 18, 78)), ColorSequenceKeypoint.new(1, Color3.fromRGB(68, 28, 108))}, Topbar = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(45, 18, 70)), ColorSequenceKeypoint.new(1, Color3.fromRGB(72, 34, 110))}, Button = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(86, 42, 132)), ColorSequenceKeypoint.new(1, Color3.fromRGB(112, 58, 166))}, ButtonHover = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(120, 60, 176)), ColorSequenceKeypoint.new(1, Color3.fromRGB(152, 86, 215))}, Accent = Color3.fromRGB(180, 92, 255), Accent2 = Color3.fromRGB(215, 160, 255), Text = Color3.fromRGB(240, 248, 255), SubText = Color3.fromRGB(215, 180, 235), Stroke = Color3.fromRGB(132, 88, 185), Glow = Color3.fromRGB(190, 96, 255) },
     Midnight = { Main = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(10, 10, 12)), ColorSequenceKeypoint.new(0.5, Color3.fromRGB(15, 15, 18)), ColorSequenceKeypoint.new(1, Color3.fromRGB(22, 22, 26))}, Topbar = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(15, 15, 18)), ColorSequenceKeypoint.new(1, Color3.fromRGB(25, 25, 30))}, Button = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 35, 45)), ColorSequenceKeypoint.new(1, Color3.fromRGB(45, 45, 55))}, ButtonHover = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(55, 55, 65)), ColorSequenceKeypoint.new(1, Color3.fromRGB(75, 75, 85))}, Accent = Color3.fromRGB(200, 200, 220), Accent2 = Color3.fromRGB(255, 255, 255), Text = Color3.fromRGB(240, 240, 245), SubText = Color3.fromRGB(170, 170, 180), Stroke = Color3.fromRGB(60, 60, 70), Glow = Color3.fromRGB(150, 150, 170) },
     Rainbow = { Accent = Color3.fromRGB(255, 255, 255), Accent2 = Color3.fromRGB(200, 200, 200), Text = Color3.fromRGB(255, 255, 255), Stroke = Color3.fromRGB(100, 100, 100) }
 }
@@ -588,7 +588,14 @@ end
 local targetCFrame = CFrame.new(-9.65371513, 255.272766, -611.338257, -0.797527432, -1.24680053e-08, 0.60328269, -5.25633981e-09, 1, 1.37181635e-08, -0.60328269, 7.769553e-09, -0.797527432)
 local targetPosition = targetCFrame.Position 
 
-local pathParams = { AgentRadius = 2, AgentHeight = 5, AgentCanJump = true, AgentJumpHeight = 10, AgentMaxSlope = 45 }
+local pathParams = {
+    AgentRadius = 3.5,
+    AgentHeight = 5,
+    AgentCanJump = true,
+    AgentJumpHeight = 10,
+    AgentMaxSlope = 45,
+    WaypointSpacing = 4
+}
 local path = PathfindingService:CreatePath(pathParams)
 
 local function walkToTarget(char, hum, root)
@@ -596,14 +603,23 @@ local function walkToTarget(char, hum, root)
     
     local function scanSurroundings()
         local rayOrigin = root.Position
-        local rayDirection = root.CFrame.LookVector * 3 
+        local directions = {
+            root.CFrame.LookVector * 4,
+            (root.CFrame * CFrame.Angles(0, math.rad(30), 0)).LookVector * 3.5,
+            (root.CFrame * CFrame.Angles(0, math.rad(-30), 0)).LookVector * 3.5
+        }
         local raycastParams = RaycastParams.new()
         raycastParams.FilterDescendantsInstances = {char}
         raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-        if workspace:Raycast(rayOrigin, rayDirection, raycastParams) then hum.Jump = true end
+        for _, dir in ipairs(directions) do
+            if workspace:Raycast(rayOrigin, dir, raycastParams) then
+                hum.Jump = true
+                break
+            end
+        end
     end
 
-    while autoFarmData.IsActive and char == me.Character and hum.Health > 0 and not isPlayerInArena(char) and (root.Position - targetPosition).Magnitude > 1.5 do
+    while autoFarmData.IsActive and char == me.Character and hum.Health > 0 and not isPlayerInArena(char) and (root.Position - targetPosition).Magnitude > 2 do
         if getgenv().IsFarmPaused then
             hum:MoveTo(root.Position) 
             while getgenv().IsFarmPaused and autoFarmData.IsActive and hum.Health > 0 and char == me.Character do
@@ -621,7 +637,7 @@ local function walkToTarget(char, hum, root)
                 if not autoFarmData.IsActive or hum.Health <= 0 or char ~= me.Character then break end
                 if isPlayerInArena(char) then break end 
                 if getgenv().IsFarmPaused then break end 
-                if (root.Position - targetPosition).Magnitude <= 1.5 then break end
+                if (root.Position - targetPosition).Magnitude <= 2 then break end
 
                 if waypoint.Action == Enum.PathWaypointAction.Jump then hum.Jump = true end
 
@@ -629,13 +645,28 @@ local function walkToTarget(char, hum, root)
 
                 local moveConnection
                 local reached = false
-                local timeOut = tick() + 2 
+                local timeOut = tick() + 1.2
+                local lastPos = root.Position
+                local lastCheck = tick()
 
                 moveConnection = hum.MoveToFinished:Connect(function() reached = true end)
 
                 while not reached and tick() < timeOut do
                     if not autoFarmData.IsActive or isPlayerInArena(char) or getgenv().IsFarmPaused or hum.Health <= 0 or char ~= me.Character then break end
                     scanSurroundings()
+                    
+                    if tick() - lastCheck >= 0.4 then
+                        if (root.Position - lastPos).Magnitude < 0.8 then
+                            hum.Jump = true
+                            local sideDir = (root.CFrame * CFrame.Angles(0, math.rad(90), 0)).LookVector * 2
+                            hum:MoveTo(root.Position + sideDir)
+                            task.wait(0.2)
+                            break
+                        end
+                        lastPos = root.Position
+                        lastCheck = tick()
+                    end
+                    
                     task.wait(0.05)
                 end
 
@@ -654,10 +685,10 @@ local function walkToTarget(char, hum, root)
     if autoFarmData.IsActive and char == me.Character and not isPlayerInArena(char) and not getgenv().IsFarmPaused and hum.Health > 0 then
         hum:MoveTo(targetPosition)
         local t = tick() + 2
-        while (root.Position - targetPosition).Magnitude > 1 and tick() < t and hum.Health > 0 and char == me.Character do
+        while (root.Position - targetPosition).Magnitude > 1.5 and tick() < t and hum.Health > 0 and char == me.Character do
             task.wait(0.1)
         end
-        if hum.Health > 0 and char == me.Character then
+        if hum.Health > 0 and char == me.Character and (root.Position - targetPosition).Magnitude <= 2.5 then
             root.CFrame = targetCFrame
         end
     end
