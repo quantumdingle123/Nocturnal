@@ -631,8 +631,13 @@ local function scanSurroundings(char, hum, root)
 end
 
 local function waitUntilUnpaused(char, hum, root)
+    local appliedBrakes = false
     while isFarmPaused() do
         if not isCharacterValid(char, hum, root) then return false end
+        if not appliedBrakes then
+            hum:MoveTo(root.Position)
+            appliedBrakes = true
+        end
         task.wait(0.1)
     end
     return true
@@ -649,7 +654,16 @@ local function moveToWaypoint(char, hum, root, position)
 
     while os.clock() - startTime < 3 do
         if not isCharacterValid(char, hum, root) then return false end
+        
+        local wasPaused = isFarmPaused()
         if not waitUntilUnpaused(char, hum, root) then return false end
+        
+        if wasPaused then
+            hum:MoveTo(position)
+            startTime = os.clock()
+            lastCheck = os.clock()
+            lastPos = root.Position
+        end
 
         local dist2D = Vector3.new(root.Position.X, 0, root.Position.Z) - Vector3.new(position.X, 0, position.Z)
         if dist2D.Magnitude <= 3 or (root.Position - position).Magnitude <= 3 then
