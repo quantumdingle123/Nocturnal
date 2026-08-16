@@ -673,6 +673,9 @@ local function moveToWaypoint(char, hum, root, position)
         if os.clock() - lastCheck >= 0.5 then
             if (root.Position - lastPos).Magnitude < 0.5 then
                 hum.Jump = true
+                local backDir = (root.CFrame.LookVector * -3) + (root.CFrame.RightVector * math.random(-2, 2))
+                hum:MoveTo(root.Position + backDir)
+                task.wait(0.3)
                 return false
             end
             lastPos = root.Position
@@ -700,7 +703,12 @@ local function walkToTarget(char, hum, root)
             path:ComputeAsync(root.Position, targetPosition)
         end)
 
-        if not computed or path.Status ~= Enum.PathStatus.Success then return false end
+        if not computed or path.Status ~= Enum.PathStatus.Success then
+            hum.Jump = true
+            hum:MoveTo(root.Position + Vector3.new(math.random(-3, 3), 0, math.random(-3, 3)))
+            task.wait(0.5)
+            return false 
+        end
 
         local waypoints = path:GetWaypoints()
         if #waypoints == 0 then return false end
