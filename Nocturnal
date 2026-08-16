@@ -588,7 +588,7 @@ end
 local baseTargetCFrame = CFrame.new(-9.65371513, 255.272766, -611.338257, -0.797527432, -1.24680053e-08, 0.60328269, -5.25633981e-09, 1, 1.37181635e-08, -0.60328269, 7.769553e-09, -0.797527432)
 
 local pathParams = {
-    AgentRadius = 3.5,
+    AgentRadius = 2,
     AgentHeight = 5,
     AgentCanJump = true,
     AgentJumpHeight = 10,
@@ -688,6 +688,8 @@ local function walkToTarget(char, hum, root)
                 end
             end
         else
+            hum:MoveTo(currentTargetPosition)
+            hum.Jump = true
             task.wait(1)
         end
     end
