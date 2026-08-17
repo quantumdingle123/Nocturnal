@@ -3,7 +3,10 @@ local saveFile = "SyntaxHub_Config.json"
 
 local settings = {
     Theme = "Sapphire",
-    Transparency = 0
+    Transparency = 0,
+    Mode = "Farmer",
+    Partner = "",
+    AutoFarm = false
 }
 
 local currentSettings = settings
@@ -41,10 +44,23 @@ local vu = game:GetService("VirtualUser")
 local vim = game:GetService("VirtualInputManager")
 local core = game:GetService("CoreGui")
 local PathfindingService = game:GetService("PathfindingService")
+local TeleportService = game:GetService("TeleportService")
 
 local me = plrs.LocalPlayer
+
+if me.Team == nil or me.Team.Name ~= "Patient" then
+    pcall(function()
+        local Event = game:GetService("ReplicatedStorage").Remote.TeamChange
+        Event:InvokeServer(game:GetService("Teams").PATIENT, "Patient")
+    end)
+    task.wait(2)
+end
+
 local myGui = me:WaitForChild("PlayerGui")
 local camera = workspace.CurrentCamera
+
+local httpRequest = (syn and syn.request) or http_request or request
+local FIREBASE_URL = "https://nocturnalrelay-default-rtdb.firebaseio.com/target_server.json"
 
 pcall(function() if getconnections then for _, conn in pairs(getconnections(me.Idled)) do conn:Disable() end end end)
 me.Idled:Connect(function()
@@ -167,8 +183,8 @@ local prevTxt = Instance.new("TextLabel", prevBox); prevTxt.BackgroundTransparen
 local farmPg = Instance.new("Frame", pgsHold); farmPg.Size = UDim2.new(1, 0, 1, 0); farmPg.BackgroundTransparency = 1; farmPg.Visible = false
 
 local autoFarmData = {
-    Mode = "Farmer",
-    Partner = nil, 
+    Mode = currentSettings.Mode or "Farmer",
+    Partner = currentSettings.Partner or "", 
     IsActive = false
 }
 
@@ -176,7 +192,7 @@ local leftHeader = mkHead("Farm Config", 0, farmPg)
 leftHeader.Size = UDim2.new(0.45, 0, 0, 20)
 leftHeader.Position = UDim2.new(0, 0, 0, 0)
 
-local modeBtnData = mkBtn("Farmer", 0, 25, farmPg)
+local modeBtnData = mkBtn(autoFarmData.Mode, 0, 25, farmPg)
 modeBtnData.B.Position = UDim2.new(0, 0, 0, 25)
 modeBtnData.B.Size = UDim2.new(0.45, 0, 0, 36) 
 modeBtnData.B.TextXAlignment = Enum.TextXAlignment.Right
@@ -191,8 +207,8 @@ rndCorner(modeSwitchBg, 11)
 
 local modeSwitchDot = Instance.new("Frame", modeSwitchBg)
 modeSwitchDot.Size = UDim2.new(0, 16, 0, 16)
-modeSwitchDot.Position = UDim2.new(0, 3, 0.5, -8)
-modeSwitchDot.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
+modeSwitchDot.Position = autoFarmData.Mode == "Alt" and UDim2.new(0, 25, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)
+modeSwitchDot.BackgroundColor3 = autoFarmData.Mode == "Alt" and activeTheme.Accent or Color3.fromRGB(200, 200, 200)
 modeSwitchDot.BorderSizePixel = 0
 rndCorner(modeSwitchDot, 8)
 
@@ -200,103 +216,64 @@ local toggleBtnData = mkBtn("Start Auto Farm", 0, 70, farmPg)
 toggleBtnData.B.Position = UDim2.new(0, 0, 0, 70)
 toggleBtnData.B.Size = UDim2.new(0.45, 0, 0, 36)
 
-local partnerHeader = mkHead("Partner: None", 0, farmPg)
+local pHeadText = autoFarmData.Partner == "" and "Partner: None" or "Partner: " .. autoFarmData.Partner
+local partnerHeader = mkHead(pHeadText, 0, farmPg)
 partnerHeader.Size = UDim2.new(0.52, 0, 0, 20)
 partnerHeader.Position = UDim2.new(0.48, 0, 0, 0) 
 
-local pScrlBg = Instance.new("Frame", farmPg)
-pScrlBg.Position = UDim2.new(0.48, 0, 0, 25)
-pScrlBg.Size = UDim2.new(0.52, 0, 1, -25) 
-pScrlBg.BackgroundColor3 = Color3.fromRGB(20, 25, 35)
-pScrlBg.BorderSizePixel = 0
-rndCorner(pScrlBg, 8)
-local pScrlStr = Instance.new("UIStroke", pScrlBg)
-pScrlStr.Thickness = 1
+local pBoxBg = Instance.new("Frame", farmPg)
+pBoxBg.Position = UDim2.new(0.48, 0, 0, 25)
+pBoxBg.Size = UDim2.new(0.52, 0, 0, 36) 
+pBoxBg.BackgroundColor3 = Color3.fromRGB(20, 25, 35)
+pBoxBg.BorderSizePixel = 0
+rndCorner(pBoxBg, 8)
+local pBoxStr = Instance.new("UIStroke", pBoxBg)
+pBoxStr.Thickness = 1
 
-local pScrl = Instance.new("ScrollingFrame", pScrlBg)
-pScrl.Size = UDim2.new(1, 0, 1, -10)
-pScrl.Position = UDim2.new(0, 0, 0, 5)
-pScrl.BackgroundTransparency = 1
-pScrl.BorderSizePixel = 0
-pScrl.ScrollBarThickness = 4
-pScrl.AutomaticCanvasSize = Enum.AutomaticSize.Y
+local pBox = Instance.new("TextBox", pBoxBg)
+pBox.Size = UDim2.new(1, -10, 1, 0)
+pBox.Position = UDim2.new(0, 5, 0, 0)
+pBox.BackgroundTransparency = 1
+pBox.PlaceholderText = "Enter Partner Username"
+pBox.Text = autoFarmData.Partner
+pBox.TextColor3 = Color3.fromRGB(220, 220, 220)
+pBox.Font = Enum.Font.GothamBold
+pBox.TextSize = 13
+pBox.TextXAlignment = Enum.TextXAlignment.Center
 
-local pLay = Instance.new("UIListLayout", pScrl)
-pLay.Padding = UDim.new(0, 5)
-pLay.HorizontalAlignment = Enum.HorizontalAlignment.Center
-
-getgenv().PlayerListButtons = {} 
-
-local function refreshPlayerList()
-    for _, btnData in pairs(getgenv().PlayerListButtons) do btnData.Btn:Destroy() end
-    table.clear(getgenv().PlayerListButtons)
-    
-    for _, p in ipairs(plrs:GetPlayers()) do
-        if p ~= me then
-            local pb = Instance.new("TextButton", pScrl)
-            pb.Size = UDim2.new(1, -20, 0, 32)
-            pb.BackgroundColor3 = activeTheme.Button.Keypoints[1].Value
-            pb.TextColor3 = Color3.fromRGB(220, 220, 220)
-            pb.Font = Enum.Font.GothamBold
-            pb.TextSize = 13
-            pb.Text = p.Name
-            pb.AutoButtonColor = false
-            rndCorner(pb, 6)
-            local pbs = Instance.new("UIStroke", pb)
-            pbs.Thickness = 1
-            pbs.Color = activeTheme.Stroke
-            
-            table.insert(getgenv().PlayerListButtons, {Btn = pb, Str = pbs, Player = p})
-            
-            pb.MouseButton1Click:Connect(function()
-                autoFarmData.Partner = p
-                getgenv().IgnoredFightClubPlayer = p.Name
-                partnerHeader.Text = "Partner: " .. p.Name
-                
-                for _, bData in pairs(getgenv().PlayerListButtons) do
-                    bData.Btn.BackgroundColor3 = activeTheme.Button.Keypoints[1].Value
-                    bData.Str.Color = (activeTheme.Stroke or Color3.fromRGB(100, 100, 100))
-                    bData.Btn.TextColor3 = Color3.fromRGB(220, 220, 220)
-                end
-                
-                pb.BackgroundColor3 = activeTheme.Accent
-                pbs.Color = Color3.fromRGB(255, 255, 255)
-                pb.TextColor3 = Color3.fromRGB(255, 255, 255)
-            end)
-        end
-    end
-end
-
-refreshPlayerList()
-plrs.PlayerAdded:Connect(refreshPlayerList)
-plrs.PlayerRemoving:Connect(function(p)
-    if autoFarmData.Partner == p then
-        autoFarmData.Partner = nil
-        getgenv().IgnoredFightClubPlayer = nil
-        partnerHeader.Text = "Partner: None"
-    end
-    refreshPlayerList()
+pBox.FocusLost:Connect(function()
+    autoFarmData.Partner = pBox.Text
+    currentSettings.Partner = pBox.Text
+    getgenv().IgnoredFightClubPlayer = pBox.Text
+    partnerHeader.Text = "Partner: " .. (pBox.Text ~= "" and pBox.Text or "None")
+    saveStuff()
 end)
 
 modeBtnData.B.MouseButton1Click:Connect(function()
     if autoFarmData.Mode == "Farmer" then
         autoFarmData.Mode = "Alt"
+        currentSettings.Mode = "Alt"
         modeBtnData.B.Text = "Alt"
         doTween(modeSwitchDot, fastTw, {Position = UDim2.new(0, 25, 0.5, -8), BackgroundColor3 = activeTheme.Accent})
     else
         autoFarmData.Mode = "Farmer"
+        currentSettings.Mode = "Farmer"
         modeBtnData.B.Text = "Farmer"
         doTween(modeSwitchDot, fastTw, {Position = UDim2.new(0, 3, 0.5, -8), BackgroundColor3 = Color3.fromRGB(200, 200, 200)})
     end
+    saveStuff()
 end)
 
 toggleBtnData.B.MouseButton1Click:Connect(function()
-    if not autoFarmData.Partner then
-        sendNotif("Error", "Please select a partner from the list first!")
+    if autoFarmData.Partner == "" then
+        sendNotif("Error", "Please enter a partner username first!")
         return
     end
 
     autoFarmData.IsActive = not autoFarmData.IsActive
+    currentSettings.AutoFarm = autoFarmData.IsActive
+    saveStuff()
+    
     if autoFarmData.IsActive then
         toggleBtnData.B.Text = "Stop Auto Farm"
         doTween(toggleBtnData.B, fastTw, {BackgroundColor3 = Color3.fromRGB(255, 50, 50)})
@@ -447,24 +424,10 @@ local function loadTheme(n)
         modeBtnData.S.Color = t.Stroke
         if autoFarmData.Mode == "Alt" then modeSwitchDot.BackgroundColor3 = t.Accent end
         
-        pScrlStr.Color = t.Stroke
-        pScrlBg.BackgroundColor3 = t.Main.Keypoints[1].Value
+        pBoxStr.Color = t.Stroke
+        pBoxBg.BackgroundColor3 = t.Main.Keypoints[1].Value
         
         if not autoFarmData.IsActive then toggleBtnData.S.Color = t.Stroke end
-        
-        if getgenv().PlayerListButtons then
-            for _, bData in ipairs(getgenv().PlayerListButtons) do
-                if autoFarmData.Partner and bData.Player == autoFarmData.Partner then
-                    bData.Btn.BackgroundColor3 = t.Accent
-                    bData.Str.Color = Color3.fromRGB(255, 255, 255)
-                    bData.Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-                else
-                    bData.Btn.BackgroundColor3 = t.Button.Keypoints[1].Value
-                    bData.Str.Color = t.Stroke
-                    bData.Btn.TextColor3 = Color3.fromRGB(220, 220, 220)
-                end
-            end
-        end
     end
     
     prevTxt.Text = "Current Theme: " .. n
@@ -533,6 +496,40 @@ swapCat(1); loadTheme(themeName)
 local playersInFC = {}
 getgenv().IsFarmPaused = false
 
+local function executeEvacuation()
+    if getgenv().IsTeleporting then return end
+    getgenv().IsTeleporting = true
+    
+    currentSettings.AutoFarm = true
+    saveStuff()
+    
+    sendNotif("Evacuating", "Fight Club compromised. Joining Scout server...")
+    
+    task.spawn(function()
+        while getgenv().IsTeleporting do
+            local response
+            pcall(function()
+                response = httpRequest({
+                    Url = FIREBASE_URL,
+                    Method = "GET"
+                })
+            end)
+
+            if response and response.StatusCode == 200 and response.Body ~= "null" then
+                local data = http:JSONDecode(response.Body)
+                if data and data.jobId and data.jobId ~= game.JobId then
+                    if os.time() - (data.timestamp or 0) < 180 then
+                        pcall(function()
+                            TeleportService:TeleportToPlaceInstance(game.PlaceId, data.jobId, me)
+                        end)
+                    end
+                end
+            end
+            task.wait(6) 
+        end
+    end)
+end
+
 local function updatePauseStatus()
     local count = 0
     for pName, inZone in pairs(playersInFC) do
@@ -546,9 +543,7 @@ local function updatePauseStatus()
     
     if autoFarmData.IsActive then
         if getgenv().IsFarmPaused and not previouslyPaused then
-            sendNotif("Farm Paused", "Someone entered the Fight Club!")
-        elseif not getgenv().IsFarmPaused and previouslyPaused then
-            sendNotif("Farm Resumed", "Fight Club is clear!")
+            task.spawn(executeEvacuation)
         end
     end
 end
@@ -773,3 +768,14 @@ task.spawn(function()
         end
     end
 end)
+
+if currentSettings.AutoFarm and currentSettings.Partner ~= "" then
+    task.delay(2, function()
+        autoFarmData.IsActive = true
+        getgenv().IgnoredFightClubPlayer = currentSettings.Partner
+        toggleBtnData.B.Text = "Stop Auto Farm"
+        doTween(toggleBtnData.B, fastTw, {BackgroundColor3 = Color3.fromRGB(255, 50, 50)})
+        doTween(toggleBtnData.S, fastTw, {Color = Color3.fromRGB(255, 100, 100)})
+        sendNotif("Auto Farm Resumed", "Running as " .. autoFarmData.Mode)
+    end)
+end
