@@ -48,6 +48,7 @@ local TeleportService = game:GetService("TeleportService")
 
 local me = plrs.LocalPlayer
 
+-- Ensure they load in as Patient to resume farming
 if me.Team == nil or me.Team.Name ~= "Patient" then
     pcall(function()
         local Event = game:GetService("ReplicatedStorage").Remote.TeamChange
@@ -496,6 +497,17 @@ swapCat(1); loadTheme(themeName)
 local playersInFC = {}
 getgenv().IsFarmPaused = false
 
+local function teleportWithRetry(targetJobId)
+    task.spawn(function()
+        while getgenv().IsTeleporting do
+            pcall(function()
+                TeleportService:TeleportToPlaceInstance(game.PlaceId, targetJobId, me)
+            end)
+            task.wait(6) 
+        end
+    end)
+end
+
 local function executeEvacuation()
     if getgenv().IsTeleporting then return end
     getgenv().IsTeleporting = true
@@ -503,31 +515,110 @@ local function executeEvacuation()
     currentSettings.AutoFarm = true
     saveStuff()
     
-    sendNotif("Evacuating", "Fight Club compromised. Joining Scout server...")
-    
-    task.spawn(function()
-        while getgenv().IsTeleporting do
-            local response
-            pcall(function()
-                response = httpRequest({
-                    Url = FIREBASE_URL,
-                    Method = "GET"
-                })
-            end)
+    if autoFarmData.Mode == "Farmer" then
+        sendNotif("Evacuating", "Leader Mode: Finding a safe server...")
+        
+        -- Step 1: Wipe database to signal Alt to wait
+        local wipePayload = http:JSONEncode({
+            jobId = "SEARCHING",
+            timestamp = os.time(),
+            sender = me.Name
+        })
+        pcall(function()
+            httpRequest({
+                Url = FIREBASE_URL,
+                Method = "PUT",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = wipePayload
+            })
+        end)
+        
+        -- Step 2: Begin infinite hop to find dead server
+        task.spawn(function()
+            local placeId = game.PlaceId
+            local cursor = ""
+            while true do
+                local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Asc&limit=100"
+                if cursor ~= "" then 
+                    url = url .. "&cursor=" .. cursor 
+                end
 
-            if response and response.StatusCode == 200 and response.Body ~= "null" then
-                local data = http:JSONDecode(response.Body)
-                if data and data.jobId and data.jobId ~= game.JobId then
-                    if os.time() - (data.timestamp or 0) < 180 then
-                        pcall(function()
-                            TeleportService:TeleportToPlaceInstance(game.PlaceId, data.jobId, me)
-                        end)
+                local res
+                pcall(function()
+                    res = httpRequest({
+                        Url = url, 
+                        Method = "GET"
+                    })
+                end)
+                
+                if res and res.StatusCode == 200 then
+                    local data = http:JSONDecode(res.Body)
+                    if data and data.data then
+                        for _, srv in ipairs(data.data) do
+                            if type(srv) == "table" and srv.id ~= game.JobId and srv.playing and srv.playing < 7 then
+                                -- Step 3: Server found, update Firebase
+                                local foundPayload = http:JSONEncode({
+                                    jobId = srv.id,
+                                    timestamp = os.time(),
+                                    sender = me.Name
+                                })
+                                pcall(function()
+                                    httpRequest({
+                                        Url = FIREBASE_URL,
+                                        Method = "PUT",
+                                        Headers = { ["Content-Type"] = "application/json" },
+                                        Body = foundPayload
+                                    })
+                                end)
+                                
+                                -- Step 4: Teleport Leader
+                                teleportWithRetry(srv.id)
+                                return 
+                            end
+                        end
+                    end
+                    cursor = data.nextPageCursor
+                    if not cursor then cursor = "" end -- Reset to endlessly search
+                end
+                task.wait(1)
+            end
+        end)
+        
+    elseif autoFarmData.Mode == "Alt" then
+        sendNotif("Evacuating", "Follower Mode: Hiding & waiting for Leader...")
+        
+        -- Step 1: Hide as Orderly
+        pcall(function()
+            local Event = game:GetService("ReplicatedStorage").Remote.TeamChange
+            Event:InvokeServer(game:GetService("Teams").ORDERLY, "Orderly")
+        end)
+        
+        -- Step 2: Poll Firebase for the green light
+        task.spawn(function()
+            while getgenv().IsTeleporting do
+                local response
+                pcall(function()
+                    response = httpRequest({
+                        Url = FIREBASE_URL,
+                        Method = "GET"
+                    })
+                end)
+
+                if response and response.StatusCode == 200 and response.Body ~= "null" then
+                    local data = http:JSONDecode(response.Body)
+                    
+                    if data and data.jobId and data.jobId ~= "SEARCHING" and data.jobId ~= game.JobId then
+                        if os.time() - (data.timestamp or 0) < 180 then
+                            -- Step 3: Teleport Follower
+                            teleportWithRetry(data.jobId)
+                            return 
+                        end
                     end
                 end
+                task.wait(3) 
             end
-            task.wait(6) 
-        end
-    end)
+        end)
+    end
 end
 
 local function updatePauseStatus()
