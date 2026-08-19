@@ -189,6 +189,19 @@ local autoFarmData = {
     IsActive = false
 }
 
+-- CLIENT SPECIFIC HARDCODE 
+if me.Name == "ManicV0ID" then
+    autoFarmData.Mode = "Farmer"
+    autoFarmData.Partner = "enderman1127911"
+    currentSettings.Mode = "Farmer"
+    currentSettings.Partner = "enderman1127911"
+elseif me.Name == "enderman1127911" then
+    autoFarmData.Mode = "Alt"
+    autoFarmData.Partner = "ManicV0ID"
+    currentSettings.Mode = "Alt"
+    currentSettings.Partner = "ManicV0ID"
+end
+
 local leftHeader = mkHead("Farm Config", 0, farmPg)
 leftHeader.Size = UDim2.new(0.45, 0, 0, 20)
 leftHeader.Position = UDim2.new(0, 0, 0, 0)
@@ -578,7 +591,7 @@ local function executeEvacuation()
                         end
                     end
                     cursor = data.nextPageCursor
-                    if not cursor then cursor = "" end -- Reset to endlessly search
+                    if not cursor then cursor = "" end 
                 end
                 task.wait(1)
             end
