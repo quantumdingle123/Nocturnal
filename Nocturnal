@@ -190,16 +190,16 @@ local autoFarmData = {
 }
 
 -- CLIENT SPECIFIC HARDCODE 
-if me.Name == "ManicV0ID" then
+if me.Name == "IIIIllllIllllIlllII" then
     autoFarmData.Mode = "Farmer"
     autoFarmData.Partner = "enderman1127911"
     currentSettings.Mode = "Farmer"
     currentSettings.Partner = "enderman1127911"
 elseif me.Name == "enderman1127911" then
     autoFarmData.Mode = "Alt"
-    autoFarmData.Partner = "ManicV0ID"
+    autoFarmData.Partner = "IIIIllllIllllIlllII"
     currentSettings.Mode = "Alt"
-    currentSettings.Partner = "ManicV0ID"
+    currentSettings.Partner = "IIIIllllIllllIlllII"
 end
 
 local leftHeader = mkHead("Farm Config", 0, farmPg)
