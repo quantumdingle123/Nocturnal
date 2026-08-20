@@ -2,7 +2,6 @@ local plrs = game:GetService("Players")
 local me = plrs.LocalPlayer
 
 local http = game:GetService("HttpService")
--- DYNAMIC SAVE FILE: Separates the configs based on username!
 local saveFile = "Nocturnal_Config_" .. me.Name .. ".json"
 
 local settings = {
@@ -190,18 +189,22 @@ local autoFarmData = {
     IsActive = false
 }
 
--- CLIENT SPECIFIC HARDCODE 
-if me.Name == "suzialt6" then
+-- CASE-INSENSITIVE IDENTITY ENFORCEMENT
+local myLowerName = string.lower(me.Name)
+if myLowerName == "suzialt6" then
     autoFarmData.Mode = "Farmer"
     autoFarmData.Partner = "chudmaster5000w"
     currentSettings.Mode = "Farmer"
     currentSettings.Partner = "chudmaster5000w"
-elseif me.Name == "chudmaster5000w" then
+elseif myLowerName == "chudmaster5000w" then
     autoFarmData.Mode = "Alt"
     autoFarmData.Partner = "suzialt6"
     currentSettings.Mode = "Alt"
     currentSettings.Partner = "suzialt6"
 end
+
+-- Immediately initialize ignored partner
+getgenv().IgnoredFightClubPlayer = autoFarmData.Partner
 
 local leftHeader = mkHead("Farm Config", 0, farmPg)
 leftHeader.Size = UDim2.new(0.45, 0, 0, 20)
@@ -532,7 +535,6 @@ local function executeEvacuation()
     if autoFarmData.Mode == "Farmer" then
         sendNotif("Evacuating", "Leader Mode: Finding a safe server...")
         
-        -- Step 1: Wipe database to signal Alt to wait
         local wipePayload = http:JSONEncode({
             jobId = "SEARCHING",
             timestamp = os.time(),
@@ -547,7 +549,6 @@ local function executeEvacuation()
             })
         end)
         
-        -- Step 2: Begin infinite hop to find dead server
         task.spawn(function()
             local placeId = game.PlaceId
             local cursor = ""
@@ -570,7 +571,6 @@ local function executeEvacuation()
                     if data and data.data then
                         for _, srv in ipairs(data.data) do
                             if type(srv) == "table" and srv.id ~= game.JobId and srv.playing and srv.playing < 7 then
-                                -- Step 3: Server found, update Firebase
                                 local foundPayload = http:JSONEncode({
                                     jobId = srv.id,
                                     timestamp = os.time(),
@@ -585,7 +585,6 @@ local function executeEvacuation()
                                     })
                                 end)
                                 
-                                -- Step 4: Teleport Leader
                                 teleportWithRetry(srv.id)
                                 return 
                             end
@@ -601,13 +600,11 @@ local function executeEvacuation()
     elseif autoFarmData.Mode == "Alt" then
         sendNotif("Evacuating", "Follower Mode: Hiding & waiting for Leader...")
         
-        -- Step 1: Hide as Orderly
         pcall(function()
             local Event = game:GetService("ReplicatedStorage").Remote.TeamChange
             Event:InvokeServer(game:GetService("Teams").ORDERLY, "Orderly")
         end)
         
-        -- Step 2: Poll Firebase for the green light
         task.spawn(function()
             while getgenv().IsTeleporting do
                 local response
@@ -623,7 +620,6 @@ local function executeEvacuation()
                     
                     if data and data.jobId and data.jobId ~= "SEARCHING" and data.jobId ~= game.JobId then
                         if os.time() - (data.timestamp or 0) < 180 then
-                            -- Step 3: Teleport Follower
                             teleportWithRetry(data.jobId)
                             return 
                         end
@@ -637,8 +633,12 @@ end
 
 local function updatePauseStatus()
     local count = 0
+    local myLower = string.lower(me.Name)
+    local ignoredLower = string.lower(getgenv().IgnoredFightClubPlayer or "")
+
     for pName, inZone in pairs(playersInFC) do
-        if inZone and pName ~= me.Name and pName ~= getgenv().IgnoredFightClubPlayer then
+        local pLower = string.lower(pName)
+        if inZone and pLower ~= myLower and pLower ~= ignoredLower then
             count = count + 1
         end
     end
