@@ -1,5 +1,9 @@
+local plrs = game:GetService("Players")
+local me = plrs.LocalPlayer
+
 local http = game:GetService("HttpService")
-local saveFile = "SyntaxHub_Config.json"
+-- DYNAMIC SAVE FILE: Separates the configs based on username!
+local saveFile = "Nocturnal_Config_" .. me.Name .. ".json"
 
 local settings = {
     Theme = "Sapphire",
@@ -36,7 +40,6 @@ end
 
 loadStuff() 
 
-local plrs = game:GetService("Players")
 local uis = game:GetService("UserInputService")
 local ts = game:GetService("TweenService")
 local rs = game:GetService("RunService")
@@ -45,8 +48,6 @@ local vim = game:GetService("VirtualInputManager")
 local core = game:GetService("CoreGui")
 local PathfindingService = game:GetService("PathfindingService")
 local TeleportService = game:GetService("TeleportService")
-
-local me = plrs.LocalPlayer
 
 -- Ensure they load in as Patient to resume farming
 if me.Team == nil or me.Team.Name ~= "Patient" then
